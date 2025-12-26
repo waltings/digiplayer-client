@@ -19,22 +19,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y coreutils quilt parted qemu-user-static debootstrap zerofree zip \
             dosfstools libarchive-tools libcap2-bin grep rsync xz-utils file git curl bc \
-            gpg pigz xxd arch-test
+            gpg pigz xxd arch-test kmod
 
       - name: Clone pi-gen
         run: |
           git clone --depth 1 https://github.com/RPi-Distro/pi-gen.git
-          cd pi-gen
 
       - name: Configure pi-gen
         run: |
           cd pi-gen
 
-          # Basic configuration
-          cat > config << EOF
+          # Basic configuration - use Lite image (stage0, stage1, stage2 only)
+          cat > config << 'EOF'
           IMG_NAME="digiplayer"
           RELEASE="bookworm"
-          DEPLOY_ZIP=1
+          DEPLOY_ZIP=0
           LOCALE_DEFAULT="en_US.UTF-8"
           TARGET_HOSTNAME="digiplayer"
           KEYBOARD_KEYMAP="us"
@@ -43,18 +42,29 @@ jobs:
           FIRST_USER_NAME="pi"
           FIRST_USER_PASS="digiplayer"
           ENABLE_SSH=1
-          STAGE_LIST="stage0 stage1 stage2"
           EOF
+
+      - name: Setup stages
+        run: |
+          cd pi-gen
+
+          # Skip desktop stages (3, 4, 5)
+          touch stage3/SKIP stage4/SKIP stage5/SKIP
+          touch stage3/SKIP_IMAGES stage4/SKIP_IMAGES stage5/SKIP_IMAGES
+
+          # Skip problematic packages in stage2
+          # Remove the packages file that causes issues
+          if [ -f stage2/01-sys-tweaks/00-packages ]; then
+            # Keep only essential packages, remove rpi-specific ones that may not exist
+            grep -v "rpi-swap\|rpi-loop-utils\|rpi-usb-gadget" stage2/01-sys-tweaks/00-packages > stage2/01-sys-tweaks/00-packages.new || true
+            mv stage2/01-sys-tweaks/00-packages.new stage2/01-sys-tweaks/00-packages
+          fi
 
       - name: Create DigiPlayer stage
         run: |
           cd pi-gen
 
-          # Skip stages we don't need
-          touch stage3/SKIP stage4/SKIP stage5/SKIP
-          touch stage4/SKIP_IMAGES stage5/SKIP_IMAGES
-
-          # Create custom stage for DigiPlayer
+          # Create custom stage for DigiPlayer at end of stage2
           mkdir -p stage2/99-digiplayer/files
 
           # Copy our application files
@@ -64,15 +74,21 @@ jobs:
           cp -r $GITHUB_WORKSPACE/systemd stage2/99-digiplayer/files/
           cp -r $GITHUB_WORKSPACE/scripts stage2/99-digiplayer/files/
 
-          # Create installation script
-          cat > stage2/99-digiplayer/00-run.sh << 'SCRIPT'
-          #!/bin/bash -e
+          # Create packages file for our dependencies
+          cat > stage2/99-digiplayer/00-packages << 'PACKAGES'
+          python3
+          python3-pip
+          python3-venv
+          chromium-browser
+          cage
+          unclutter
+          fonts-dejavu
+          network-manager
+          PACKAGES
 
-          # Install system packages
-          on_chroot << CHROOT
-          apt-get update
-          apt-get install -y python3 python3-pip chromium-browser cage unclutter fonts-dejavu
-          CHROOT
+          # Create installation script
+          cat > stage2/99-digiplayer/01-run.sh << 'SCRIPT'
+          #!/bin/bash -e
 
           # Create directories
           install -d "${ROOTFS_DIR}/opt/digiplayer"
@@ -100,22 +116,23 @@ jobs:
           systemctl enable digiplayer-kiosk.service
           CHROOT
 
-          # Configure auto-login
+          # Configure auto-login for kiosk
           install -d "${ROOTFS_DIR}/etc/systemd/system/getty@tty1.service.d"
-          cat > "${ROOTFS_DIR}/etc/systemd/system/getty@tty1.service.d/autologin.conf" << EOF
+          cat > "${ROOTFS_DIR}/etc/systemd/system/getty@tty1.service.d/autologin.conf" << 'AUTOLOGIN'
           [Service]
           ExecStart=
-          ExecStart=-/sbin/agetty --autologin pi --noclear %I \$TERM
-          EOF
+          ExecStart=-/sbin/agetty --autologin pi --noclear %I $TERM
+          AUTOLOGIN
 
-          # Disable screen blanking
+          # Set ownership
           on_chroot << CHROOT
-          echo "consoleblank=0" >> /boot/cmdline.txt
+          chown -R pi:pi /var/lib/digiplayer
+          chown -R pi:pi /var/log/digiplayer
           CHROOT
 
           SCRIPT
 
-          chmod +x stage2/99-digiplayer/00-run.sh
+          chmod +x stage2/99-digiplayer/01-run.sh
 
       - name: Build image
         run: |
@@ -128,7 +145,13 @@ jobs:
           cd pi-gen/deploy
           IMAGE_FILE=$(ls *.img 2>/dev/null | head -1)
           if [ -n "$IMAGE_FILE" ]; then
+            echo "Compressing $IMAGE_FILE..."
             xz -9 -T0 "$IMAGE_FILE"
+            ls -lh *.img.xz
+          else
+            echo "No image file found!"
+            ls -la
+            exit 1
           fi
 
       - name: Upload artifact
@@ -137,6 +160,7 @@ jobs:
           name: digiplayer-image
           path: pi-gen/deploy/*.img.xz
           retention-days: 30
+          if-no-files-found: error
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/')
