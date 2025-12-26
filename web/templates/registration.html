@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DigiPlayer - Registration</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .container {
+            text-align: center;
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        .logo {
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(90deg, #00d4ff, #00ff88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            font-size: 1.5rem;
+            color: #ff6b6b;
+            margin-bottom: 2rem;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+
+        .device-id-box {
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid #00d4ff;
+            border-radius: 12px;
+            padding: 20px 40px;
+            margin: 2rem auto;
+            display: inline-block;
+        }
+
+        .device-id {
+            font-size: 2.5rem;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            color: #00ff88;
+            letter-spacing: 4px;
+        }
+
+        .instructions {
+            font-size: 1.1rem;
+            color: rgba(255, 255, 255, 0.8);
+            margin: 2rem 0;
+            line-height: 1.6;
+        }
+
+        .server-url {
+            color: #00d4ff;
+            font-weight: 600;
+        }
+
+        .status-section {
+            margin-top: 3rem;
+            padding-top: 2rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        .status-label {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .status-value {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .status-dot.online { background: #00ff88; box-shadow: 0 0 10px #00ff88; }
+        .status-dot.offline { background: #ff6b6b; }
+        .status-dot.waiting { background: #ffd93d; animation: pulse 1.5s infinite; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .waiting-text {
+            animation: dots 1.5s infinite;
+        }
+
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+
+        .footer {
+            margin-top: 3rem;
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">DIGIPLAYER</div>
+        <div class="subtitle">Unregistered Player</div>
+
+        <div class="device-id-box">
+            <div class="device-id" id="deviceId">{{ status.device_id or 'Loading...' }}</div>
+        </div>
+
+        <div class="instructions">
+            Register this ID at:<br>
+            <span class="server-url">{{ status.server_url or 'www.digireklaam.ee' }}/players</span>
+        </div>
+
+        <div class="status-section">
+            <div class="status-row">
+                <span class="status-label">Internet</span>
+                <span class="status-value">
+                    <span class="status-dot" id="internetDot"></span>
+                    <span id="internetStatus">Checking...</span>
+                </span>
+            </div>
+            <div class="status-row">
+                <span class="status-label">Server</span>
+                <span class="status-value">
+                    <span class="status-dot" id="serverDot"></span>
+                    <span id="serverStatus">Checking...</span>
+                </span>
+            </div>
+            <div class="status-row">
+                <span class="status-label">Status</span>
+                <span class="status-value">
+                    <span class="status-dot waiting" id="registrationDot"></span>
+                    <span id="registrationStatus">Waiting for registration...</span>
+                </span>
+            </div>
+        </div>
+
+        <div class="footer">
+            DigiPlayer V1 | IP: <span id="ipAddress">{{ status.ip_address or '...' }}</span>
+        </div>
+    </div>
+
+    <script>
+        function updateStatus() {
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(data => {
+                    // Device ID
+                    document.getElementById('deviceId').textContent = data.device_id || 'Error';
+
+                    // IP Address
+                    document.getElementById('ipAddress').textContent = data.ip_address || 'Unknown';
+
+                    // Internet status
+                    const internetDot = document.getElementById('internetDot');
+                    const internetStatus = document.getElementById('internetStatus');
+                    if (data.internet_connected) {
+                        internetDot.className = 'status-dot online';
+                        internetStatus.textContent = 'Connected (' + (data.ip_address || 'Unknown') + ')';
+                    } else {
+                        internetDot.className = 'status-dot offline';
+                        internetStatus.textContent = 'Not connected';
+                    }
+
+                    // Server status
+                    const serverDot = document.getElementById('serverDot');
+                    const serverStatus = document.getElementById('serverStatus');
+                    if (data.server_online) {
+                        serverDot.className = 'status-dot online';
+                        serverStatus.textContent = 'Online';
+                    } else {
+                        serverDot.className = 'status-dot offline';
+                        serverStatus.textContent = 'Offline';
+                    }
+
+                    // Registration status
+                    const regDot = document.getElementById('registrationDot');
+                    const regStatus = document.getElementById('registrationStatus');
+                    if (data.registered) {
+                        regDot.className = 'status-dot online';
+                        regStatus.textContent = 'Registered as: ' + (data.player_name || 'Player');
+                        // Redirect to status page after a moment
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 2000);
+                    } else {
+                        regDot.className = 'status-dot waiting';
+                        regStatus.textContent = 'Waiting for registration...';
+                    }
+                })
+                .catch(error => {
+                    console.error('Status update failed:', error);
+                });
+        }
+
+        // Update status every 3 seconds
+        setInterval(updateStatus, 3000);
+
+        // Initial update
+        updateStatus();
+    </script>
+</body>
+</html>

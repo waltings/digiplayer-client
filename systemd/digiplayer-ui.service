@@ -1,0 +1,18 @@
+[Unit]
+Description=DigiPlayer Kiosk Browser
+After=digiplayer.service graphical.target
+Wants=digiplayer.service
+PartOf=digiplayer.service
+
+[Service]
+Type=simple
+User=pi
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/pi/.Xauthority
+ExecStartPre=/bin/sleep 5
+ExecStart=/usr/bin/chromium-browser --kiosk --noerrdialogs --disable-infobars --disable-session-crashed-bubble --disable-restore-session-state --no-first-run --start-fullscreen --app=http://localhost:8080
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=graphical.target

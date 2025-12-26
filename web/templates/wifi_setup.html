@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DigiPlayer - WiFi Setup</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+        }
+
+        .logo {
+            text-align: center;
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 2rem;
+            background: linear-gradient(90deg, #00d4ff, #00ff88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+
+        .card-title {
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 8px;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 12px 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: white;
+            font-size: 1rem;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #00d4ff;
+        }
+
+        select option {
+            background: #1a1a2e;
+            color: white;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(90deg, #00d4ff, #00ff88);
+            color: #1a1a2e;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0, 212, 255, 0.4);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            margin-top: 10px;
+        }
+
+        .network-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .network-item {
+            padding: 12px 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s;
+        }
+
+        .network-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .network-item.selected {
+            background: rgba(0, 212, 255, 0.2);
+            border: 1px solid #00d4ff;
+        }
+
+        .signal-icon {
+            opacity: 0.6;
+        }
+
+        .message {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .message.success {
+            background: rgba(0, 255, 136, 0.2);
+            border: 1px solid #00ff88;
+            color: #00ff88;
+        }
+
+        .message.error {
+            background: rgba(255, 107, 107, 0.2);
+            border: 1px solid #ff6b6b;
+            color: #ff6b6b;
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-top-color: #00d4ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">DigiPlayer WiFi Setup</div>
+
+        <div id="message" class="message hidden"></div>
+
+        <div class="card">
+            <div class="card-title">
+                <span>Available Networks</span>
+                <button onclick="scanNetworks()" style="background: none; border: none; color: #00d4ff; cursor: pointer;">
+                    Refresh
+                </button>
+            </div>
+            <div id="networkList" class="network-list">
+                <div style="text-align: center; padding: 20px; color: rgba(255,255,255,0.5);">
+                    <span class="spinner"></span>
+                    Scanning for networks...
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Connect to Network</div>
+            <form id="wifiForm" onsubmit="connectWifi(event)">
+                <div class="form-group">
+                    <label>Network Name (SSID)</label>
+                    <input type="text" id="ssid" name="ssid" required placeholder="Enter network name">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="password" name="password" placeholder="Enter password">
+                </div>
+                <button type="submit" class="btn btn-primary" id="connectBtn">
+                    Connect
+                </button>
+            </form>
+        </div>
+
+        <button onclick="window.location.href='/'" class="btn btn-secondary">
+            Back to Status
+        </button>
+    </div>
+
+    <script>
+        let selectedNetwork = null;
+
+        function scanNetworks() {
+            const list = document.getElementById('networkList');
+            list.innerHTML = '<div style="text-align: center; padding: 20px;"><span class="spinner"></span>Scanning...</div>';
+
+            fetch('/api/wifi/scan')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.networks && data.networks.length > 0) {
+                        list.innerHTML = data.networks.map(ssid =>
+                            `<div class="network-item" onclick="selectNetwork('${ssid}')">
+                                <span>${ssid}</span>
+                                <span class="signal-icon">📶</span>
+                            </div>`
+                        ).join('');
+                    } else {
+                        list.innerHTML = '<div style="text-align: center; padding: 20px; color: rgba(255,255,255,0.5);">No networks found</div>';
+                    }
+                })
+                .catch(error => {
+                    list.innerHTML = '<div style="text-align: center; padding: 20px; color: #ff6b6b;">Scan failed</div>';
+                });
+        }
+
+        function selectNetwork(ssid) {
+            selectedNetwork = ssid;
+            document.getElementById('ssid').value = ssid;
+
+            // Update visual selection
+            document.querySelectorAll('.network-item').forEach(item => {
+                item.classList.remove('selected');
+                if (item.textContent.includes(ssid)) {
+                    item.classList.add('selected');
+                }
+            });
+        }
+
+        function showMessage(text, type) {
+            const msg = document.getElementById('message');
+            msg.textContent = text;
+            msg.className = 'message ' + type;
+            msg.classList.remove('hidden');
+        }
+
+        function connectWifi(event) {
+            event.preventDefault();
+
+            const ssid = document.getElementById('ssid').value;
+            const password = document.getElementById('password').value;
+            const btn = document.getElementById('connectBtn');
+
+            btn.innerHTML = '<span class="spinner"></span>Connecting...';
+            btn.disabled = true;
+
+            fetch('/api/wifi/connect', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ssid, password })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showMessage('WiFi configured! The device will restart...', 'success');
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 5000);
+                } else {
+                    showMessage(data.error || 'Connection failed', 'error');
+                    btn.innerHTML = 'Connect';
+                    btn.disabled = false;
+                }
+            })
+            .catch(error => {
+                showMessage('Connection failed: ' + error.message, 'error');
+                btn.innerHTML = 'Connect';
+                btn.disabled = false;
+            });
+        }
+
+        // Scan networks on page load
+        scanNetworks();
+    </script>
+</body>
+</html>
