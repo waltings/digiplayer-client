@@ -53,11 +53,14 @@ jobs:
           touch stage3/SKIP_IMAGES stage4/SKIP_IMAGES stage5/SKIP_IMAGES
 
           # Skip problematic packages in stage2
-          # Remove the packages file that causes issues
           if [ -f stage2/01-sys-tweaks/00-packages ]; then
-            # Keep only essential packages, remove rpi-specific ones that may not exist
             grep -v "rpi-swap\|rpi-loop-utils\|rpi-usb-gadget" stage2/01-sys-tweaks/00-packages > stage2/01-sys-tweaks/00-packages.new || true
             mv stage2/01-sys-tweaks/00-packages.new stage2/01-sys-tweaks/00-packages
+          fi
+
+          # Fix the 01-run.sh script - remove rpi-resize.service enable (doesn't exist)
+          if [ -f stage2/01-sys-tweaks/01-run.sh ]; then
+            sed -i 's/systemctl enable rpi-resize.service/true # rpi-resize disabled/' stage2/01-sys-tweaks/01-run.sh
           fi
 
       - name: Create DigiPlayer stage
