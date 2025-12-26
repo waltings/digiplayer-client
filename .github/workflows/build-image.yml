@@ -1,0 +1,147 @@
+name: Build Raspberry Pi Image
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y coreutils quilt parted qemu-user-static debootstrap zerofree zip \
+            dosfstools libarchive-tools libcap2-bin grep rsync xz-utils file git curl bc \
+            gpg pigz xxd arch-test
+
+      - name: Clone pi-gen
+        run: |
+          git clone --depth 1 https://github.com/RPi-Distro/pi-gen.git
+          cd pi-gen
+
+      - name: Configure pi-gen
+        run: |
+          cd pi-gen
+
+          # Basic configuration
+          cat > config << EOF
+          IMG_NAME="digiplayer"
+          RELEASE="bookworm"
+          DEPLOY_ZIP=1
+          LOCALE_DEFAULT="en_US.UTF-8"
+          TARGET_HOSTNAME="digiplayer"
+          KEYBOARD_KEYMAP="us"
+          KEYBOARD_LAYOUT="English (US)"
+          TIMEZONE_DEFAULT="Europe/Tallinn"
+          FIRST_USER_NAME="pi"
+          FIRST_USER_PASS="digiplayer"
+          ENABLE_SSH=1
+          STAGE_LIST="stage0 stage1 stage2"
+          EOF
+
+      - name: Create DigiPlayer stage
+        run: |
+          cd pi-gen
+
+          # Skip stages we don't need
+          touch stage3/SKIP stage4/SKIP stage5/SKIP
+          touch stage4/SKIP_IMAGES stage5/SKIP_IMAGES
+
+          # Create custom stage for DigiPlayer
+          mkdir -p stage2/99-digiplayer/files
+
+          # Copy our application files
+          cp -r $GITHUB_WORKSPACE/digiplayer stage2/99-digiplayer/files/
+          cp -r $GITHUB_WORKSPACE/web stage2/99-digiplayer/files/
+          cp $GITHUB_WORKSPACE/requirements.txt stage2/99-digiplayer/files/
+          cp -r $GITHUB_WORKSPACE/systemd stage2/99-digiplayer/files/
+          cp -r $GITHUB_WORKSPACE/scripts stage2/99-digiplayer/files/
+
+          # Create installation script
+          cat > stage2/99-digiplayer/00-run.sh << 'SCRIPT'
+          #!/bin/bash -e
+
+          # Install system packages
+          on_chroot << CHROOT
+          apt-get update
+          apt-get install -y python3 python3-pip chromium-browser cage unclutter fonts-dejavu
+          CHROOT
+
+          # Create directories
+          install -d "${ROOTFS_DIR}/opt/digiplayer"
+          install -d "${ROOTFS_DIR}/etc/digiplayer"
+          install -d "${ROOTFS_DIR}/var/lib/digiplayer/media"
+          install -d "${ROOTFS_DIR}/var/log/digiplayer"
+
+          # Copy application files
+          cp -r files/digiplayer "${ROOTFS_DIR}/opt/digiplayer/"
+          cp -r files/web "${ROOTFS_DIR}/opt/digiplayer/"
+          cp files/requirements.txt "${ROOTFS_DIR}/opt/digiplayer/"
+
+          # Install Python packages
+          on_chroot << CHROOT
+          pip3 install --break-system-packages -r /opt/digiplayer/requirements.txt
+          CHROOT
+
+          # Install systemd services
+          install -m 644 files/systemd/digiplayer.service "${ROOTFS_DIR}/etc/systemd/system/"
+          install -m 644 files/systemd/digiplayer-kiosk.service "${ROOTFS_DIR}/etc/systemd/system/"
+
+          # Enable services
+          on_chroot << CHROOT
+          systemctl enable digiplayer.service
+          systemctl enable digiplayer-kiosk.service
+          CHROOT
+
+          # Configure auto-login
+          install -d "${ROOTFS_DIR}/etc/systemd/system/getty@tty1.service.d"
+          cat > "${ROOTFS_DIR}/etc/systemd/system/getty@tty1.service.d/autologin.conf" << EOF
+          [Service]
+          ExecStart=
+          ExecStart=-/sbin/agetty --autologin pi --noclear %I \$TERM
+          EOF
+
+          # Disable screen blanking
+          on_chroot << CHROOT
+          echo "consoleblank=0" >> /boot/cmdline.txt
+          CHROOT
+
+          SCRIPT
+
+          chmod +x stage2/99-digiplayer/00-run.sh
+
+      - name: Build image
+        run: |
+          cd pi-gen
+          sudo ./build.sh
+        timeout-minutes: 120
+
+      - name: Compress image
+        run: |
+          cd pi-gen/deploy
+          IMAGE_FILE=$(ls *.img 2>/dev/null | head -1)
+          if [ -n "$IMAGE_FILE" ]; then
+            xz -9 -T0 "$IMAGE_FILE"
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: digiplayer-image
+          path: pi-gen/deploy/*.img.xz
+          retention-days: 30
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: pi-gen/deploy/*.img.xz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
